@@ -1,0 +1,5 @@
+{
+  "name": "WishCraft - AI Card Generator",
+  "description": "A visually stunning AI-powered card generator that creates personalized animated wishes for any occasion using Gemini 3 and Framer Motion.",
+  "requestFramePermissions": []
+}
