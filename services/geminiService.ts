@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { WishData, GeneratedWish } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
 
 export const generateWish = async (data: WishData): Promise<GeneratedWish> => {
   const prompt = `Generate a personalized, warm, and heartfelt card message for the occasion of ${data.occasion}. 
