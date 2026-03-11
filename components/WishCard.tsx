@@ -19,6 +19,7 @@ interface WishCardProps {
   replayCount?: number;
   onCopyLink?: () => void;
   isCopied?: boolean;
+  onInteract?: () => void;
 }
 
 const Floating3DIcon = React.memo(({ icon, delay }: { icon: string; delay: number }) => {
@@ -67,13 +68,18 @@ const Floating3DIcon = React.memo(({ icon, delay }: { icon: string; delay: numbe
   );
 });
 
-const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading, isSharedView, replayCount, onCopyLink, isCopied }, ref) => {
+const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading, isSharedView, replayCount, onCopyLink, isCopied, onInteract }, ref) => {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [audioError, setAudioError] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(!isSharedView);
+
+  // Sync state if isSharedView changes after mount (e.g. hash routing)
+  useEffect(() => {
+    setHasInteracted(!isSharedView);
+  }, [isSharedView, wish]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -165,6 +171,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
 
   const handleInteraction = () => {
     setHasInteracted(true);
+    if (onInteract) onInteract();
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -353,7 +360,10 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                 exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }}
                 transition={{ duration: 0.8, ease: "easeInOut" }}
                 className="absolute inset-0 z-50 flex flex-col items-center justify-center p-10 backface-hidden rounded-[40px] cursor-pointer"
-                onClick={handleInteraction}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  handleInteraction();
+                }}
               >
                 {/* Stunning Premium Overlay Background */}
                 <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xl" />
@@ -420,7 +430,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                     const bgIcons = theme?.bgIcons || ['✨', '🎈', '🎉', '🌟'];
                     const emoji = bgIcons[i % bgIcons.length];
                     const leftPositions = ['15%', '38%', '62%', '85%'];
-                    const stringLengths = [80, 140, 90, 150];
+                    const stringLengths = window.innerWidth < 768 ? [40, 70, 45, 75] : [80, 140, 90, 150];
                     const zDepths = [25, 35, 28, 40];
 
                     return (
@@ -471,7 +481,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                     <motion.h2
                       animate={{ y: [0, -8, 0] }}
                       transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      className="text-4xl md:text-6xl font-serif text-white mb-6 md:mb-10 leading-tight italic drop-shadow-xl"
+                      className="text-4xl md:text-6xl font-serif text-white leading-tight italic drop-shadow-xl"
                     >
                       <span className="text-2xl md:text-3xl opacity-80 mr-2">Dear</span>
                       {wish.recipientName},
@@ -479,7 +489,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                   </div>
 
                   <div
-                    className="min-h-[80px] max-h-[160px] md:min-h-[120px] md:max-h-[200px] flex items-start justify-center max-w-xl w-full relative translate-z-[30px] mb-8 overflow-y-auto scrollbar-hide py-4 px-2 pointer-events-auto"
+                    className="max-h-[250px] md:max-h-[280px] flex items-start justify-center max-w-xl w-full relative translate-z-[30px] mb-4 overflow-y-auto scrollbar-hide py-2 px-2 pointer-events-auto"
                     onPointerDown={(e) => { e.stopPropagation(); }}
                     onPointerMove={(e) => { e.stopPropagation(); }}
                     onWheel={(e) => { e.stopPropagation(); }}
@@ -493,7 +503,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                       }}
                       initial="hidden"
                       animate="visible"
-                      className="text-2xl md:text-4xl font-bold leading-tight drop-shadow-2xl font-handwritten px-2 text-center my-auto"
+                      className="text-lg md:text-2xl font-bold leading-tight drop-shadow-2xl font-handwritten px-2 text-center mt-0 w-full"
                       style={{
                         color: '#ffffff',
                         textShadow: `0 0 15px ${theme.primaryColor}, 0 0 30px ${theme.glowColor}`
@@ -513,7 +523,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                     </motion.p>
                   </div>
 
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2.5 }} className="mt-4 flex flex-col items-center gap-2 translate-z-[35px]">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2.5 }} className="mt-4 flex flex-col items-center translate-z-[35px]">
                     <p className="text-white/60 text-sm italic mr-12">With love,</p>
                     <p className="text-4xl md:text-6xl text-white font-signature ml-12" style={{ textShadow: textShadow3D }}>
                       {wish.senderName}

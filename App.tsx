@@ -19,54 +19,100 @@ const App: React.FC = () => {
   const [replayCount, setReplayCount] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [aiQuotaReached, setAiQuotaReached] = useState(false);
+  const [isCardOpen, setIsCardOpen] = useState(false);
   const wishCardRef = React.useRef<WishCardRef>(null);
 
   // Reusable celebration effect with occasion-specific emojis
   const triggerConfetti = useCallback((occasion?: Occasion) => {
-    const duration = 12 * 1000; // Increased from 8 to 12 seconds
+    const duration = occasion === 'Valentine' ? 12 * 1000 : 8 * 1000;
     const animationEnd = Date.now() + duration;
 
     const icons = occasion ? OCCASION_THEMES[occasion].bgIcons : ['✨', '🎉', '🎊', '⭐'];
     const shapes = icons.map(icon => confetti.shapeFromText({ text: icon, scalar: 3 }));
     const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
 
-    const interval: any = setInterval(function () {
-      const timeLeft = animationEnd - Date.now();
-      if (timeLeft <= 0) return clearInterval(interval);
+    const isMobile = window.innerWidth < 768;
+    const scalar = isMobile ? 1.6 : 2.2;
 
-      const particleCount = 50 * (timeLeft / duration);
+    if (occasion === 'Valentine') {
+      // Snow Style (Valentine)
+      let skew = 1;
+      const frame = () => {
+        const timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) return;
+        
+        const ticks = Math.max(200, 500 * (timeLeft / duration));
+        skew = Math.max(0.8, skew - 0.001);
 
-      confetti({
-        particleCount,
-        angle: 60,
-        spread: 65,
-        origin: { x: 0, y: 0.8 },
-        shapes,
-        scalar: 2.2,
-        zIndex: 100,
-      });
-
-      confetti({
-        particleCount,
-        angle: 120,
-        spread: 65,
-        origin: { x: 1, y: 0.8 },
-        shapes,
-        scalar: 2.2,
-        zIndex: 100,
-      });
-
-      if (Math.random() > 0.6) {
         confetti({
-          particleCount: 10,
-          origin: { x: randomInRange(0.1, 0.9), y: randomInRange(0, 0.4) },
+          particleCount: isMobile ? 1 : 2,
+          startVelocity: 0,
+          ticks: ticks,
+          origin: {
+            x: Math.random(),
+            y: (Math.random() * skew) - 0.2
+          },
           shapes,
-          gravity: 0.7,
-          scalar: 1.8,
-          zIndex: 100,
+          gravity: randomInRange(0.4, 0.6),
+          scalar: randomInRange(0.4, 1) * scalar,
+          drift: randomInRange(-0.4, 0.4),
+          zIndex: 100
         });
-      }
-    }, 400);
+
+        requestAnimationFrame(frame);
+      };
+      frame();
+      
+    } else if (occasion === 'Birthday') {
+      // School Pride Style (Birthday)
+      const frame = () => {
+        if (Date.now() > animationEnd) return;
+        
+        confetti({
+          particleCount: isMobile ? 1 : 3,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          shapes,
+          scalar,
+          zIndex: 100
+        });
+        confetti({
+          particleCount: isMobile ? 1 : 3,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          shapes,
+          scalar,
+          zIndex: 100
+        });
+
+        requestAnimationFrame(frame);
+      };
+      frame();
+      
+    } else {
+      // Fireworks Style / Default (New Year, Eid, Anniversary)
+      let defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100, shapes, scalar };
+      const interval: any = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) return clearInterval(interval);
+
+        const baseParticleCount = isMobile ? 15 : 40;
+        const particleCount = baseParticleCount * (timeLeft / duration);
+
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+        });
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+        });
+      }, 250);
+    }
   }, []);
 
   const OCCASIONS = ['Birthday', 'Eid', 'Valentine', 'New Year', 'Anniversary'];
@@ -90,7 +136,13 @@ const App: React.FC = () => {
       }
 
       const json = JSON.stringify(minified);
-      return LZString.compressToEncodedURIComponent(json);
+
+      // Convert UTF-16 string to standard binary string without blowing up chars like encodeURIComponent does
+      const binaryString = String.fromCodePoint(...new TextEncoder().encode(json));
+      const encoded = btoa(binaryString);
+
+      // Make it strictly URL safe
+      return encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     } catch (e) {
       console.error("Encoding error:", e);
       return "";
@@ -100,34 +152,70 @@ const App: React.FC = () => {
   // Robust URL-Safe Decoding
   const decodeData = (str: string) => {
     try {
-      // Try modern highly-compressed format first
-      const decompressed = LZString.decompressFromEncodedURIComponent(str);
-      if (decompressed) {
-        const parsed = JSON.parse(decompressed);
-        // If it possesses minified keys, expand them
-        if (parsed.m !== undefined) {
-          return {
-            message: parsed.m,
-            mood: parsed.d || 'custom',
-            colorTheme: parsed.c || 'from-slate-800 to-slate-900',
-            recipientName: parsed.r,
-            senderName: parsed.s,
-            occasion: typeof parsed.o === 'number' ? OCCASIONS[parsed.o] || parsed.o : parsed.o
-          };
+      // Legacy check for old LZString format (usually starts with N4)
+      if (str.startsWith("N4")) {
+        const decompressed = LZString.decompressFromEncodedURIComponent(str);
+        if (decompressed) {
+          const parsed = JSON.parse(decompressed);
+          if (parsed.m !== undefined) {
+            return {
+              message: parsed.m,
+              mood: parsed.d || 'custom',
+              colorTheme: parsed.c || 'from-slate-800 to-slate-900',
+              recipientName: parsed.r,
+              senderName: parsed.s,
+              occasion: typeof parsed.o === 'number' ? OCCASIONS[parsed.o] || parsed.o : parsed.o
+            };
+          }
+          return parsed;
         }
-        return parsed; // In case an old LZString link had full keys
       }
-      // Fallback: Legacy Base64 links
+
+      // Convert URL-safe base64 back to standard base64
       let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-      // Re-add padding if necessary
       while (base64.length % 4) base64 += '=';
 
-      const decoded = decodeURIComponent(atob(base64));
-      return JSON.parse(decoded);
+      const binaryStr = atob(base64);
+      let json = '';
+      try {
+        // Try the new, highly-compressed raw UTF8 decoding first
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        json = new TextDecoder().decode(bytes);
+      } catch (e) {
+        // Fallback for the brief window where encodeURIComponent was used
+        json = decodeURIComponent(binaryStr);
+      }
+
+      const parsed = JSON.parse(json);
+
+      // Expand minified keys
+      if (parsed.m !== undefined) {
+        return {
+          message: parsed.m,
+          mood: parsed.d || 'custom',
+          colorTheme: parsed.c || 'from-slate-800 to-slate-900',
+          recipientName: parsed.r,
+          senderName: parsed.s,
+          occasion: typeof parsed.o === 'number' ? OCCASIONS[parsed.o] || parsed.o : parsed.o
+        };
+      }
+
+      return parsed;
     } catch (e) {
       console.error("Decoding error:", e);
       return null;
     }
+  };
+
+  // Smooth scroll to the WishCard
+  const scrollToCard = () => {
+    setTimeout(() => {
+      const cardElement = document.getElementById('wish-card-container');
+      if (cardElement) {
+        cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   };
 
   // Handle Shared Link on Mount and Hash Change
@@ -142,8 +230,9 @@ const App: React.FC = () => {
         if (decodedData) {
           setWish(decodedData);
           setIsSharedView(true);
+          setIsCardOpen(false);
           setError(null);
-          triggerConfetti(decodedData.occasion);
+          scrollToCard();
         } else {
           setError("This magic link seems to be broken. Try creating a new one!");
         }
@@ -159,6 +248,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setIsSharedView(false);
+    setIsCardOpen(true);
     try {
       if (data.manualMessage && data.manualMessage.trim()) {
         const manualWish: GeneratedWish = {
@@ -171,10 +261,12 @@ const App: React.FC = () => {
         };
         setWish(manualWish);
         triggerConfetti(data.occasion);
+        scrollToCard();
       } else {
         const result = await generateWish(data);
         setWish(result);
         triggerConfetti(result.occasion);
+        scrollToCard();
       }
     } catch (err: any) {
       console.error(err);
@@ -321,7 +413,7 @@ const App: React.FC = () => {
           {!isSharedView && !wish && (
             <header className="text-center max-w-3xl mx-auto mb-10 md:mb-16 space-y-4 md:space-y-6">
               <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
-                Personalized Wishes, <span className="bg-gradient-to-r from-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">Perfected.</span>
+                Digital Connections, <span className="bg-gradient-to-r from-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">Forged in Magic.</span>
               </h1>
               <p className="text-slate-400 text-lg md:text-xl font-medium leading-relaxed">
                 Create cinematic, 3D animated cards with manual input or AI.
@@ -380,7 +472,7 @@ const App: React.FC = () => {
               </div>
             )}
 
-            <div className={`${isSharedView ? 'max-w-2xl mx-auto w-full' : 'lg:col-span-7'} space-y-8`}>
+            <div id="wish-card-container" className={`${isSharedView ? 'max-w-2xl mx-auto w-full' : 'lg:col-span-7'} space-y-8`}>
               {!isSharedView && (
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -390,9 +482,9 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <WishCard ref={wishCardRef} wish={wish} isLoading={isLoading} isSharedView={isSharedView} replayCount={replayCount} onCopyLink={() => copyToClipboard(getShareUrl())} isCopied={isCopied} />
+              <WishCard ref={wishCardRef} wish={wish} isLoading={isLoading} isSharedView={isSharedView} replayCount={replayCount} onCopyLink={() => copyToClipboard(getShareUrl())} isCopied={isCopied} onInteract={() => { triggerConfetti(wish?.occasion); setIsCardOpen(true); }} />
 
-              {wish && !isLoading && !error && (
+              {wish && !isLoading && !error && isCardOpen && (
                 <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-6 duration-1000">
                   <div className="flex flex-wrap gap-4">
                     <button
