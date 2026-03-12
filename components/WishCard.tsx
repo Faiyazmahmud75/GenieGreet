@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, animate, useMotionTemplate } from 'framer-motion';
 import { GeneratedWish, Occasion } from '../types';
 import { OCCASION_THEMES } from '../lib/themes';
-import { Sparkles, Gift, Music, VolumeX, ShieldCheck, Cake, MoonStar, Heart, PartyPopper, HeartHandshake, Download, Loader2, Link, Check } from 'lucide-react';
+import { Sparkles, Gift, Music, VolumeX, ShieldCheck, Cake, MoonStar, Heart, PartyPopper, HeartHandshake, Download, Loader2, Link, Check, MousePointerClick } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
 
@@ -175,11 +175,15 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Lock drag before card is revealed in shared view
+    if (isSharedView && !hasInteracted) return;
     isDragging.current = true;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Lock 3D tilt before card is revealed in shared view
+    if (isSharedView && !hasInteracted) return;
     if (isDragging.current) {
       // Reduce sensitivity (friction)
       baseRotateY.current += e.movementX * 0.4;
@@ -319,7 +323,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
         ref={cardRef}
         key={`${wish.message}-${replayCount}`}
         style={{ rotateX: rotateXSpring, rotateY: rotateYSpring, transformStyle: 'preserve-3d' }}
-        className="w-full h-full relative preserve-3d transition-transform duration-100 cursor-grab active:cursor-grabbing"
+        className={`w-full h-full relative preserve-3d transition-transform duration-100 ${isSharedView && !hasInteracted ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
       >
         {/* THICKNESS STACKING LAYER APPROACH FOR 3D CURVES */}
         {/* We stack identical background layers slightly offset in Z space to create real 3D depth with perfect border radius */}
@@ -359,45 +363,121 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }}
                 transition={{ duration: 0.8, ease: "easeInOut" }}
-                className="absolute inset-0 z-50 flex flex-col items-center justify-center p-10 backface-hidden rounded-[40px] cursor-pointer"
+                className="absolute inset-0 z-50 flex flex-col items-center justify-center backface-hidden rounded-[40px] cursor-pointer"
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   handleInteraction();
                 }}
               >
-                {/* Stunning Premium Overlay Background */}
-                <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xl" />
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-transparent to-fuchsia-500/20 mix-blend-overlay" />
+                {/* Mystical gradient background */}
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-[40px]" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-fuchsia-900/20 via-transparent to-indigo-900/30 rounded-[40px]" />
+
+                {/* Animated dot grid */}
                 <div
-                  className="absolute inset-0 opacity-30"
-                  style={{ backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`, backgroundSize: '32px 32px' }}
+                  className="absolute inset-0 opacity-20 rounded-[40px]"
+                  style={{ backgroundImage: `radial-gradient(circle at 2px 2px, ${theme.primaryColor} 1px, transparent 0)`, backgroundSize: '28px 28px' }}
                 />
 
-                <motion.div
-                  className="relative z-10 flex flex-col items-center justify-center text-center gap-8"
-                  animate={{ y: [0, -10, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <div className="relative group">
-                    <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 to-fuchsia-500 rounded-full blur-xl opacity-50 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse" />
-                    <button
-                      className="relative w-24 h-24 rounded-full bg-white/10 border-2 border-white/30 backdrop-blur-2xl flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.2)] hover:scale-110 hover:bg-white/20 transition-all duration-300 active:scale-95"
+                {/* Floating sparkle emojis */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-[40px]">
+                  {[...theme.bgIcons.slice(0, 4), '✨', '⭐'].map((icon, idx) => (
+                    <motion.div
+                      key={`back-sparkle-${idx}`}
+                      className="absolute text-2xl md:text-3xl pointer-events-none select-none"
+                      style={{
+                        left: `${10 + idx * 15}%`,
+                        top: `${15 + (idx % 3) * 25}%`,
+                      }}
+                      animate={{
+                        y: [0, -20, 0],
+                        x: [0, idx % 2 === 0 ? 10 : -10, 0],
+                        rotate: [0, 15, -15, 0],
+                        opacity: [0.2, 0.6, 0.2],
+                      }}
+                      transition={{
+                        duration: 4 + idx * 0.5,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                        delay: idx * 0.8,
+                      }}
                     >
-                      <Gift className="w-12 h-12 text-white drop-shadow-lg" />
-                    </button>
+                      {icon}
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Central mystical content */}
+                <div className="relative z-20 flex flex-col items-center text-center px-8 gap-6">
+                  {/* Glowing orb behind gift */}
+                  <motion.div
+                    className="relative"
+                    animate={{ y: [0, -10, 0] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <motion.div
+                      className="absolute -inset-6 md:-inset-8 rounded-full"
+                      style={{ background: `radial-gradient(circle, ${theme.glowColor} 0%, transparent 70%)` }}
+                      animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full flex items-center justify-center border-2 border-white/20 shadow-[0_0_60px_rgba(255,255,255,0.15)]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02))' }}>
+                      <motion.div
+                        animate={{ rotate: [0, -5, 5, -5, 0] }}
+                        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                      >
+                        <Gift className="w-12 h-12 md:w-14 md:h-14 text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]" />
+                      </motion.div>
+                    </div>
+                    <motion.div
+                      className="absolute -inset-3 md:-inset-4 border-2 border-dashed rounded-full"
+                      style={{ borderColor: `${theme.primaryColor}40` }}
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
+                    />
+                  </motion.div>
+
+                  {/* Message text */}
+                  <div className="space-y-3 max-w-xs">
+                    <motion.p
+                      className="text-white/90 text-xl md:text-2xl font-serif italic leading-relaxed"
+                      animate={{ opacity: [0.7, 1, 0.7] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      A special surprise<br />awaits you...
+                    </motion.p>
+                    <motion.p
+                      className="text-white/50 text-sm font-medium tracking-wide"
+                      animate={{ opacity: [0.4, 0.8, 0.4] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+                    >
+                      Someone crafted a little magic,<br />just for you ✨
+                    </motion.p>
                   </div>
 
-                  <div className="space-y-3 drop-shadow-2xl">
-                    <h3 className="text-3xl font-bold text-white tracking-tight flex items-center justify-center gap-3">
-                      <Sparkles className="w-6 h-6 text-indigo-400" />
-                      Magic Awaits
-                      <Sparkles className="w-6 h-6 text-fuchsia-400" />
-                    </h3>
-                    <p className="text-slate-300 text-sm font-medium tracking-wide uppercase">
-                      Tap to open your card & play music
+                  {/* Tap hint */}
+                  <motion.div
+                    className="flex flex-col items-center gap-2 mt-2"
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <div className="w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center border border-white/20" style={{ background: `linear-gradient(135deg, ${theme.primaryColor}30, ${theme.primaryColor}10)` }}>
+                      <MousePointerClick className="w-7 h-7 md:w-8 md:h-8 text-white/80" />
+                    </div>
+                    <p className="text-white/40 text-[10px] md:text-xs font-bold uppercase tracking-[0.25em]">
+                      Tap to reveal
                     </p>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </div>
+
+                {/* Corner accents */}
+                <div className="absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 border-white/10 rounded-tl-lg" />
+                <div className="absolute top-6 right-6 w-8 h-8 border-t-2 border-r-2 border-white/10 rounded-tr-lg" />
+                <div className="absolute bottom-6 left-6 w-8 h-8 border-b-2 border-l-2 border-white/10 rounded-bl-lg" />
+                <div className="absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 border-white/10 rounded-br-lg" />
+
+                {/* Bottom watermark */}
+                <img src="/logo.png" alt="GenieGreet" className="absolute bottom-8 w-28 md:w-36 opacity-30 drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]" />
               </motion.div>
             ) : (
               <motion.div
