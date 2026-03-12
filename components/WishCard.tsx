@@ -148,7 +148,9 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
   const glareBackground = useMotionTemplate`radial-gradient(circle at ${shineX}% ${shineY}%, rgba(255,255,255,0.7) 0%, transparent 12%), linear-gradient(105deg, transparent calc(${shineX}% - 10%), rgba(255,255,255,0.4) ${shineX}%, transparent calc(${shineX}% + 10%))`;
 
   useEffect(() => {
-    if (wish?.message && hasInteracted) {
+    // Only auto-play for non-shared views (creator preview) or replays
+    // For shared views, audio is started directly in handleInteraction (required for mobile)
+    if (wish?.message && hasInteracted && !isSharedView) {
       const theme = OCCASION_THEMES[wish.occasion];
       if (theme?.audioUrl) {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
@@ -167,9 +169,25 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       };
     }
-  }, [wish?.message, wish?.occasion, replayCount, hasInteracted]);
+  }, [wish?.message, wish?.occasion, replayCount, hasInteracted, isSharedView]);
 
   const handleInteraction = () => {
+    // Start audio directly in user gesture handler (required for mobile browsers)
+    if (wish) {
+      const theme = OCCASION_THEMES[wish.occasion];
+      if (theme?.audioUrl) {
+        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+        setAudioError(false);
+        const audio = new Audio(theme.audioUrl);
+        audio.onplay = () => { setIsPlaying(true); setAudioBlocked(false); };
+        audio.onpause = () => setIsPlaying(false);
+        audio.onended = () => setIsPlaying(false);
+        audio.onerror = () => { setAudioError(true); setIsPlaying(false); };
+        audio.volume = 0.5;
+        audioRef.current = audio;
+        audio.play().catch(() => setAudioBlocked(true));
+      }
+    }
     setHasInteracted(true);
     if (onInteract) onInteract();
   };
