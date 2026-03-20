@@ -8,6 +8,7 @@ import { Sparkles, Share2, Github, Plus, Volume2, Music, Link, Check, AlertCircl
 import confetti from 'canvas-confetti';
 import { OCCASION_THEMES } from './lib/themes';
 import LZString from 'lz-string';
+import { Analytics } from '@vercel/analytics/react';
 
 
 const App: React.FC = () => {
@@ -547,6 +548,7 @@ const App: React.FC = () => {
           </div>
         </footer>
       </div>
+      <Analytics />
     </div>
   );
 };
