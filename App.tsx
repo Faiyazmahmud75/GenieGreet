@@ -22,20 +22,29 @@ const App: React.FC = () => {
   const [isCardOpen, setIsCardOpen] = useState(false);
   const wishCardRef = React.useRef<WishCardRef>(null);
 
-  // Reusable celebration effect with occasion-specific emojis
-  const triggerConfetti = useCallback((occasion?: Occasion) => {
+  // Memoized shapes to avoid re-rendering canvases on every confetti call
+  const shapeCaches = React.useRef<Record<string, any>>({});
+
+  const triggerConfetti = useCallback((occasion?: Occasion, isBoosted = false) => {
     const duration = occasion === 'Valentine' ? 12 * 1000 : 8 * 1000;
     const animationEnd = Date.now() + duration;
 
     const icons = occasion ? OCCASION_THEMES[occasion].bgIcons : ['✨', '🎉', '🎊', '⭐'];
-    const shapes = icons.map(icon => confetti.shapeFromText({ text: icon, scalar: 3 }));
-    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+    const cacheKey = icons.join('');
+    
+    if (!shapeCaches.current[cacheKey]) {
+      shapeCaches.current[cacheKey] = icons.map(icon => confetti.shapeFromText({ text: icon, scalar: 3 }));
+    }
+    const shapes = shapeCaches.current[cacheKey];
 
+    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
     const isMobile = window.innerWidth < 768;
-    const scalar = isMobile ? 1.6 : 2.2;
+    
+    // Initial reveal is lighter to maintain 60fps, Replay is full volume
+    const density = isMobile ? (isBoosted ? 1.0 : 0.6) : 1.0;
+    const scalar = (isMobile ? 1.6 : 2.2) * (isBoosted ? 1.1 : 1.0);
 
     if (occasion === 'Valentine') {
-      // Snow Style (Valentine)
       let skew = 1;
       const frame = () => {
         const timeLeft = animationEnd - Date.now();
@@ -44,62 +53,57 @@ const App: React.FC = () => {
         const ticks = Math.max(200, 500 * (timeLeft / duration));
         skew = Math.max(0.8, skew - 0.001);
 
-        confetti({
-          particleCount: isMobile ? 1 : 2,
-          startVelocity: 0,
-          ticks: ticks,
-          origin: {
-            x: Math.random(),
-            y: (Math.random() * skew) - 0.2
-          },
-          shapes,
-          gravity: randomInRange(0.4, 0.6),
-          scalar: randomInRange(0.4, 1) * scalar,
-          drift: randomInRange(-0.4, 0.4),
-          zIndex: 100
-        });
-
+        if (Math.random() < density) {
+          confetti({
+            particleCount: isMobile ? 1 : 2,
+            startVelocity: 0,
+            ticks: ticks,
+            origin: { x: Math.random(), y: (Math.random() * skew) - 0.2 },
+            shapes,
+            gravity: randomInRange(0.4, 0.6),
+            scalar: randomInRange(0.4, 1) * scalar,
+            drift: randomInRange(-0.4, 0.4),
+            zIndex: 100
+          });
+        }
         requestAnimationFrame(frame);
       };
       frame();
-      
     } else if (occasion === 'Birthday') {
-      // School Pride Style (Birthday)
       const frame = () => {
         if (Date.now() > animationEnd) return;
         
-        confetti({
-          particleCount: isMobile ? 1 : 3,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          shapes,
-          scalar,
-          zIndex: 100
-        });
-        confetti({
-          particleCount: isMobile ? 1 : 3,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          shapes,
-          scalar,
-          zIndex: 100
-        });
-
+        if (Math.random() < density) {
+          confetti({
+            particleCount: isMobile ? 1 : 3,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0 },
+            shapes,
+            scalar,
+            zIndex: 100
+          });
+          confetti({
+            particleCount: isMobile ? 1 : 3,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1 },
+            shapes,
+            scalar,
+            zIndex: 100
+          });
+        }
         requestAnimationFrame(frame);
       };
       frame();
-      
     } else {
-      // Fireworks Style / Default (New Year, Eid, Anniversary)
       let defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100, shapes, scalar };
       const interval: any = setInterval(function() {
         const timeLeft = animationEnd - Date.now();
         if (timeLeft <= 0) return clearInterval(interval);
 
         const baseParticleCount = isMobile ? 15 : 40;
-        const particleCount = baseParticleCount * (timeLeft / duration);
+        const particleCount = baseParticleCount * (timeLeft / duration) * density;
 
         confetti({
           ...defaults,
@@ -284,7 +288,7 @@ const App: React.FC = () => {
   const handleReplay = () => {
     if (!wish) return;
     setReplayCount(prev => prev + 1);
-    triggerConfetti(wish.occasion);
+    triggerConfetti(wish.occasion, true);
   };
 
   const copyToClipboard = (text: string) => {
@@ -485,19 +489,22 @@ const App: React.FC = () => {
               <WishCard ref={wishCardRef} wish={wish} isLoading={isLoading} isSharedView={isSharedView} replayCount={replayCount} onCopyLink={() => copyToClipboard(getShareUrl())} isCopied={isCopied} onInteract={() => { triggerConfetti(wish?.occasion); setIsCardOpen(true); }} />
 
               {wish && !isLoading && !error && isCardOpen && (
-                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-6 duration-1000">
-                  <div className="flex flex-wrap gap-4">
-                    <button
-                      onClick={handleShare}
-                      className="flex-[2] min-w-[200px] py-4 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 group"
-                    >
-                      <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                      Share Magic Link
-                    </button>
+                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-6 duration-1000 max-w-xl mx-auto w-full">
+                  {/* Phase 1 (Top): Replay */}
+                  <button
+                    onClick={handleReplay}
+                    className="w-full py-4 px-6 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 hover:border-white/20 font-bold flex items-center justify-center gap-2 transition-all active:scale-95 group"
+                  >
+                    <RotateCcw className="w-4 h-4 group-hover:-rotate-90 transition-transform duration-500" />
+                    Replay Card
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    {/* Phase 2 (Middle on Mobile): Download */}
                     <button
                       onClick={handleDownload}
                       disabled={isDownloading}
-                      className="flex-1 min-w-[150px] py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 border border-white/10 bg-slate-800/80 hover:bg-slate-700 text-slate-200"
+                      className="flex-1 py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 border border-white/10 bg-slate-800/80 hover:bg-slate-700 text-slate-200 order-1 sm:order-2"
                     >
                       {isDownloading ? (
                         <>
@@ -511,15 +518,16 @@ const App: React.FC = () => {
                         </>
                       )}
                     </button>
-                  </div>
 
-                  <button
-                    onClick={handleReplay}
-                    className="w-full py-3 px-6 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 hover:border-white/20 font-bold flex items-center justify-center gap-2 transition-all active:scale-95 group"
-                  >
-                    <RotateCcw className="w-4 h-4 group-hover:-rotate-90 transition-transform duration-500" />
-                    Replay Card
-                  </button>
+                    {/* Phase 3 (Bottom on Mobile): Share */}
+                    <button
+                      onClick={handleShare}
+                      className="flex-1 sm:flex-[2] py-4 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 group order-2 sm:order-1"
+                    >
+                      <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                      Share Magic Link
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

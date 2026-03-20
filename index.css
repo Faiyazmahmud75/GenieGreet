@@ -82,3 +82,36 @@ body {
 .animation-delay-4000 {
   animation-delay: 4s;
 }
+
+@keyframes swing {
+  0% { transform: rotateZ(-5deg); }
+  50% { transform: rotateZ(5deg); }
+  100% { transform: rotateZ(-5deg); }
+}
+
+@keyframes float-rotate {
+  0% { transform: rotateY(-20deg) scale(1); }
+  50% { transform: rotateY(20deg) scale(1.1); }
+  100% { transform: rotateY(-20deg) scale(1); }
+}
+
+.animate-swing {
+  animation: swing 4s infinite ease-in-out;
+  transform-origin: top center;
+  will-change: transform;
+}
+
+.animate-float-rotate {
+  animation: float-rotate 3s infinite ease-in-out;
+  will-change: transform;
+}
+
+@keyframes slow-rotate {
+  0% { transform: rotateX(0deg) rotateY(0deg); }
+  100% { transform: rotateX(360deg) rotateY(360deg); }
+}
+
+.animate-slow-rotate {
+  animation: slow-rotate 20s infinite linear;
+  will-change: transform;
+}

@@ -41,12 +41,6 @@ const Floating3DIcon = React.memo(({ icon, delay }: { icon: string; delay: numbe
       initial={{ opacity: 0, z: randoms.zStart, rotateX: randoms.rotateX }}
       animate={{
         opacity: [0, randoms.opacity, randoms.opacity, 0],
-        x: [`${randoms.x}%`, `${(randoms.x + 5) % 100}%`],
-        y: [`${randoms.y}%`, `${(randoms.y - 10) % 100}%`],
-        rotateX: [randoms.rotateX, randoms.rotateX + 360],
-        rotateY: [randoms.rotateY, randoms.rotateY + 180],
-        rotateZ: [randoms.rotateZ, randoms.rotateZ + 90],
-        scale: [randoms.scale, randoms.scale * 1.1, randoms.scale],
         z: [randoms.zStart, randoms.zEnd]
       }}
       transition={{
@@ -55,11 +49,11 @@ const Floating3DIcon = React.memo(({ icon, delay }: { icon: string; delay: numbe
         delay,
         ease: "linear"
       }}
-      className="absolute text-3xl pointer-events-none select-none drop-shadow-xl filter blur-[0.2px]"
+      className="absolute text-2xl md:text-3xl pointer-events-none select-none drop-shadow-md animate-slow-rotate"
       style={{
         left: `${randoms.x}%`,
         top: `${randoms.y}%`,
-        transformStyle: 'preserve-3d',
+        z: randoms.zStart,
         willChange: 'transform, opacity'
       }}
     >
@@ -147,36 +141,60 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
 
   const glareBackground = useMotionTemplate`radial-gradient(circle at ${shineX}% ${shineY}%, rgba(255,255,255,0.7) 0%, transparent 12%), linear-gradient(105deg, transparent calc(${shineX}% - 10%), rgba(255,255,255,0.4) ${shineX}%, transparent calc(${shineX}% + 10%))`;
 
+  // 1. Stable Audio Initialization: Only runs when the wish theme/message actually changes
   useEffect(() => {
-    // Only auto-play for non-shared views (creator preview) or replays
-    // For shared views, audio is started directly in handleInteraction (required for mobile)
-    if (wish?.message && hasInteracted && !isSharedView) {
+    if (wish?.message) {
       const theme = OCCASION_THEMES[wish.occasion];
       if (theme?.audioUrl) {
-        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-        setAudioError(false);
-        const audio = new Audio(theme.audioUrl);
-        audio.onplay = () => { setIsPlaying(true); setAudioBlocked(false); };
-        audio.onpause = () => setIsPlaying(false);
-        audio.onended = () => setIsPlaying(false);
-        audio.onerror = () => { setAudioError(true); setIsPlaying(false); };
-        audio.volume = 0.5;
-        audioRef.current = audio;
-        audio.play().catch(() => setAudioBlocked(true));
+        // Only stop/reset if we don't have an audio object or the source changed
+        const currentSrc = audioRef.current?.src;
+        const newSrc = new URL(theme.audioUrl, window.location.href).href;
+        
+        if (!audioRef.current || currentSrc !== newSrc) {
+          if (audioRef.current) audioRef.current.pause();
+          
+          const audio = new Audio(theme.audioUrl);
+          audio.onplay = () => { setIsPlaying(true); setAudioBlocked(false); };
+          audio.onpause = () => setIsPlaying(false);
+          audio.onended = () => setIsPlaying(false);
+          audio.onerror = () => { setAudioError(true); setIsPlaying(false); };
+          audio.volume = 0.5;
+          audioRef.current = audio;
+        }
       }
 
       return () => {
-        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
       };
     }
-  }, [wish?.message, wish?.occasion, replayCount, hasInteracted, isSharedView]);
+  }, [wish?.message, wish?.occasion]);
+
+  // 2. Playback Trigger: Handles auto-play and replays
+  useEffect(() => {
+    if (wish?.message && audioRef.current) {
+      // Auto-play logic:
+      // - Creator preview (!isSharedView && hasInteracted)
+      // - Replay (replayCount > 0)
+      const isReplay = replayCount !== undefined && replayCount > 0;
+      const shouldAutoPlay = (!isSharedView && hasInteracted) || isReplay;
+
+      if (shouldAutoPlay) {
+        audioRef.current.play().catch(() => setAudioBlocked(true));
+      }
+    }
+  }, [replayCount, isSharedView, hasInteracted]);
 
   const handleInteraction = () => {
-    // Start audio directly in user gesture handler (required for mobile browsers)
-    if (wish) {
+    // 1. Play audio immediately (best for mobile reliability)
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => setAudioBlocked(true));
+    } else if (wish) {
+      // Fallback: create & play if not pre-initialized
       const theme = OCCASION_THEMES[wish.occasion];
       if (theme?.audioUrl) {
-        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
         setAudioError(false);
         const audio = new Audio(theme.audioUrl);
         audio.onplay = () => { setIsPlaying(true); setAudioBlocked(false); };
@@ -188,9 +206,38 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
         audio.play().catch(() => setAudioBlocked(true));
       }
     }
-    setHasInteracted(true);
-    if (onInteract) onInteract();
+
+    // 2. Defer UI state updates and final celebration
+    setTimeout(() => {
+      setHasInteracted(true);
+      // Phase 4: Confetti finale after all other animations (2.0s total)
+      setTimeout(() => {
+        if (onInteract) onInteract();
+      }, 2000);
+    }, 0);
   };
+
+  // 3. 3D Hint Animation: Triggers a subtle "wiggle" to show the card is rotatable
+  useEffect(() => {
+    if (hasInteracted && isSharedView) {
+      const timer = setTimeout(() => {
+        // Only trigger hint if user hasn't started manual interaction/drag yet
+        if (!isDragging.current) {
+          // Horizontal ping
+          animate(rotateY, [0, 10, -10, 0], {
+            duration: 3.0,
+            ease: "easeInOut",
+          });
+          // Vertical ping
+          animate(rotateX, [0, -8, 8, 0], {
+            duration: 3.0,
+            ease: "easeInOut",
+          });
+        }
+      }, 7500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasInteracted, isSharedView, rotateX, rotateY]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Lock drag before card is revealed in shared view
@@ -256,10 +303,10 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
     const theme = OCCASION_THEMES[wish.occasion];
     return (
       <div className="absolute inset-0 overflow-hidden preserve-3d pointer-events-none translate-z-[10px]">
-        {[...theme.bgIcons, ...theme.bgIcons].map((icon, idx) => (
+        {theme.bgIcons.map((icon, idx) => (
           <Floating3DIcon key={`theme-${idx}`} icon={icon} delay={idx * 1.5} />
         ))}
-        {Array.from({ length: 15 }).map((_, idx) => (
+        {Array.from({ length: 8 }).map((_, idx) => (
           <Floating3DIcon key={`sparkle-${idx}`} icon="✨" delay={idx * 1.2} />
         ))}
       </div>
@@ -356,13 +403,10 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
         {/* FRONT FACE */}
         <div
           ref={frontFaceRef}
-          className="absolute inset-0 rounded-[40px] overflow-hidden preserve-3d border-2 border-white/40 translate-z-[3px] backface-hidden bg-transparent"
+          className="absolute inset-0 rounded-[40px] overflow-hidden preserve-3d border-2 border-white/40 translate-z-[3px] backface-hidden bg-slate-900/40"
           style={{ boxShadow: `0 0 50px 5px ${theme.glowColor}, inset 0 0 20px rgba(255,255,255,0.3)` }}>
 
-          {backgroundIcons}
-          <div className="absolute inset-0 bg-white/5 backdrop-blur-sm" />
-
-          {BackgroundSvg}
+          <div className="absolute inset-0 bg-white/5" />
 
           {/* Holographic Shine Overlay */}
           <motion.div
@@ -379,10 +423,10 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }}
-                transition={{ duration: 0.8, ease: "easeInOut" }}
+                exit={{ opacity: 0, scale: 1.05 }}
+                transition={{ duration: 0.6, ease: "easeInOut" }}
                 className="absolute inset-0 z-50 flex flex-col items-center justify-center backface-hidden rounded-[40px] cursor-pointer"
-                onPointerDown={(e) => {
+                onClick={(e) => {
                   e.stopPropagation();
                   handleInteraction();
                 }}
@@ -488,12 +532,6 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                   </motion.div>
                 </div>
 
-                {/* Corner accents */}
-                <div className="absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 border-white/10 rounded-tl-lg" />
-                <div className="absolute top-6 right-6 w-8 h-8 border-t-2 border-r-2 border-white/10 rounded-tr-lg" />
-                <div className="absolute bottom-6 left-6 w-8 h-8 border-b-2 border-l-2 border-white/10 rounded-bl-lg" />
-                <div className="absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 border-white/10 rounded-br-lg" />
-
                 {/* Bottom watermark */}
                 <img src="/logo.png" alt="GenieGreet" className="absolute bottom-8 w-28 md:w-36 opacity-30 drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]" />
               </motion.div>
@@ -502,13 +540,38 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                 key="front-content"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 1, delay: 0.2 }}
+                transition={{ duration: 0.8, delay: 0.6 }}
                 className="absolute inset-0 w-full h-full preserve-3d"
+                style={{ willChange: 'transform, opacity' }}
               >
-                {/* New Lace & Hanging Emojis Decoration */}
-                <div className="absolute top-0 left-0 w-full h-full overflow-visible z-40 preserve-3d pointer-events-none">
+                {/* Phase 2: Core Elements */}
+                {BackgroundSvg}
+
+                {/* Corner accents (Phase 2) */}
+                <div className="absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 border-white/10 rounded-tl-lg pointer-events-none" />
+                <div className="absolute top-6 right-6 w-8 h-8 border-t-2 border-r-2 border-white/10 rounded-tr-lg pointer-events-none" />
+                <div className="absolute bottom-6 left-6 w-8 h-8 border-b-2 border-l-2 border-white/10 rounded-bl-lg pointer-events-none" />
+                <div className="absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 border-white/10 rounded-br-lg pointer-events-none" />
+
+                {/* Phase 4: Background Icons (Late Reveal to avoid lag) */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 1.5, delay: 2.0 }}
+                >
+                  {backgroundIcons}
+                </motion.div>
+
+                {/* Phase 5: Hanging Emojis Decoration (Post-Confetti Reveal) */}
+                <motion.div 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 1.0, delay: 4.0 }}
+                  className="absolute top-0 left-0 w-full h-full overflow-visible z-40 preserve-3d pointer-events-none"
+                  style={{ willChange: 'transform, opacity' }}
+                >
                   {/* Zigzag Lace */}
-                  <div className="w-full h-16 absolute top-0 left-0" style={{ transform: 'translateZ(18px)' }}>
+                  <div className="w-full h-16 absolute top-0 left-0" style={{ transform: 'translateZ(30px)', willChange: 'transform' }}>
                     <svg width="100%" height="100%" className="drop-shadow-[0_8px_8px_rgba(0,0,0,0.6)]">
                       <defs>
                         <pattern id="zigzag" x="0" y="0" width="60" height="48" patternUnits="userSpaceOnUse">
@@ -529,33 +592,33 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                     const emoji = bgIcons[i % bgIcons.length];
                     const leftPositions = ['15%', '38%', '62%', '85%'];
                     const stringLengths = window.innerWidth < 768 ? [40, 70, 45, 75] : [80, 140, 90, 150];
-                    const zDepths = [25, 35, 28, 40];
+                    const zDepths = [45, 60, 50, 65];
 
                     return (
-                      <motion.div
+                      <div
                         key={`hanging-${i}`}
-                        className="absolute top-0 flex flex-col items-center origin-top preserve-3d"
+                        className="absolute top-0 flex flex-col items-center origin-top preserve-3d animate-swing"
                         style={{
                           left: leftPositions[i],
-                          transform: `translateZ(${zDepths[i]}px)`
+                          transform: `translateZ(${zDepths[i]}px)`,
+                          animationDelay: `${i * 0.4}s`
                         }}
-                        animate={{ rotateZ: [-4, 4, -4] }}
-                        transition={{ duration: 3.5 + i * 0.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
                       >
                         <div className="w-[2px] bg-gradient-to-b from-white/90 to-white/20 rounded-full" style={{ height: stringLengths[i] }} />
                         <div className="w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,1)] -mt-1 z-10 border border-slate-200" />
-                        <motion.div
-                          className="text-2xl md:text-3xl mt-2"
-                          style={{ willChange: 'transform' }}
-                          animate={{ rotateY: [-20, 20, -20], scale: [1, 1.1, 1] }}
-                          transition={{ duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
+                        <div
+                          className="text-2xl md:text-3xl mt-2 animate-float-rotate"
+                          style={{
+                            animationDelay: `${i * 0.2}s`,
+                            willChange: 'transform'
+                          }}
                         >
                           {emoji}
-                        </motion.div>
-                      </motion.div>
+                        </div>
+                      </div>
                     );
                   })}
-                </div>
+                </motion.div>
 
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center z-20 translate-z-[40px]">
                   <motion.div
@@ -601,7 +664,7 @@ const WishCard = React.forwardRef<WishCardRef, WishCardProps>(({ wish, isLoading
                       }}
                       initial="hidden"
                       animate="visible"
-                      className="text-lg md:text-2xl font-bold leading-tight drop-shadow-2xl font-handwritten px-2 text-center mt-0 w-full"
+                      className="text-lg md:text-2xl font-bold leading-tight drop-shadow-2xl font-serif italic px-2 text-center mt-0 w-full"
                       style={{
                         color: '#ffffff',
                         textShadow: `0 0 15px ${theme.primaryColor}, 0 0 30px ${theme.glowColor}`
